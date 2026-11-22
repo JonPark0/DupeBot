@@ -81,6 +81,24 @@ const dupe = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub
+      .setName('relay')
+      .setDescription('링크 변환 봇(원래 글을 지우고 다시 올리는 봇)의 글을 그 회원의 글로 감지')
+      .addStringOption((o) =>
+        o
+          .setName('action')
+          .setDescription('add: 추가 / remove: 빼기 / list: 목록 보기')
+          .setRequired(true)
+          .addChoices(
+            { name: 'add (추가)', value: 'add' },
+            { name: 'remove (빼기)', value: 'remove' },
+            { name: 'list (목록 보기)', value: 'list' },
+          ),
+      )
+      .addUserOption((o) => o.setName('bot').setDescription('대상 봇'))
+      .addStringOption((o) => o.setName('id').setDescription('봇 계정이 아닌 웹훅·앱이면 그 ID')),
+  )
+  .addSubcommand((sub) =>
+    sub
       .setName('backfill')
       .setDescription('과거 메시지를 색인합니다 (반응은 달지 않음)')
       .addChannelOption((o) =>

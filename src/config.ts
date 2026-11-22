@@ -49,6 +49,9 @@ export const config = {
 
   // How long indexed messages are kept (days). Older entries are purged once a day.
   retentionDays: number('RETENTION_DAYS', 90),
+  // When a relay bot is listed, wait this long before answering a member's post: the bot usually
+  // deletes it and reposts the link within a second or two, and only the repost should be answered.
+  relayGraceMs: number('RELAY_GRACE_MS', 4000),
 
   // Image handling
   imageMaxBytes: number('IMAGE_MAX_BYTES', 20 * 1024 * 1024),

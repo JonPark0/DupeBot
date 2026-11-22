@@ -56,8 +56,9 @@ docker compose logs -f dupe-bot
 |---|---|---|
 | `/dupe config` | 서버 관리 | 옵션 없이 실행하면 현재 설정 표시. `emoji`, `semantic_emoji`, `mode`(forward/reply/react), `threshold`(사진 유사도), `same_author_minutes`, `semantic`(Claude 판정 on/off) |
 | `/dupe channel` | 서버 관리 | `include`(감시 목록에 추가. 목록이 있으면 그 채널만 감시), `exclude`(제외), `remove`, `clear`(모든 채널 감시) |
-| `/dupe backfill` | 서버 관리 | 과거 메시지 색인 (기본 1000개, 최대 20000개). **반응은 달지 않습니다** |
-| `/status` | 모두 | DB 상태, Claude 상태(켜짐/일시 중지/예산 소진/꺼짐), 오늘 사용량, 색인 수 |
+| `/dupe relay` | 서버 관리 | 링크 변환 봇 등록 (`add`/`remove`/`list`, `bot` 또는 `id`). 아래 [링크 변환 봇](#링크-변환-봇) 참고 |
+| `/dupe backfill` | 서버 관리 | 과거 메시지 색인 (기본 1000개, 최대 20000개, `RETENTION_DAYS`보다 오래된 메시지에서 멈춤). **반응은 달지 않습니다**. 진행 상황은 `/status`와 로그에 표시 |
+| `/status` | 모두 | DB 상태, Claude 상태(켜짐/일시 중지/예산 소진/꺼짐), 오늘 사용량, 색인 수, 진행 중인 과거 메시지 색인 |
 | 메시지 우클릭 → 앱 → **중복 아님** | 메시지 관리 | DupeBot의 반응·전달·답장을 지우고, 그 링크·사진을 앞으로 중복으로 보지 않음 |
 
 스레드는 상위 채널의 감시/제외 설정을 따릅니다.
@@ -73,11 +74,28 @@ docker compose logs -f dupe-bot
    - `react`: 이모지만
 4. **비공개 채널 보호**: 원본이 다른 채널에 있고 @everyone 또는 새 작성자가 그 채널을 볼 수 없으면
    전달·답장 없이 이모지만 답니다.
-5. 감지하지 않는 것: 봇·웹훅 메시지, 전달(Forward)된 메시지, tenor/giphy 반응 GIF, Discord 자체 링크,
+5. 감지하지 않는 것: 봇·웹훅 메시지(`/dupe relay`로 등록한 링크 변환 봇은 제외), 전달(Forward)된 메시지, tenor/giphy 반응 GIF, Discord 자체 링크,
    기사 미리보기 썸네일(사이트 로고가 여러 기사에 재사용되므로), 64px 미만 이미지,
    같은 작성자가 `same_author_minutes`(기본 10분) 안에 다시 올린 것
 6. 원본이 삭제됐으면 색인에서 지우고 그다음으로 오래된 게시물을 원본으로 씁니다.
+   반응한 게시물(재게시)이 삭제되면 그 아래 전달하거나 답장한 봇 메시지도 지웁니다.
 7. `RETENTION_DAYS`(기본 90일)가 지난 지문은 매일 삭제합니다.
+
+### 링크 변환 봇
+
+회원이 올린 `x.com` 링크를 지우고 `fixupx.com` 등으로 바꿔 다시 올리는 봇이 있으면, 기본 설정에서는
+링크가 전부 봇 메시지가 되어 감지되지 않습니다. 그 봇을 등록하면:
+
+```
+/dupe relay action:add bot:@봇이름
+/dupe backfill channel:#채널      # 이미 올라온 변환 글도 색인
+```
+
+- 등록한 봇의 글은 **그 글이 언급한 첫 번째 회원**이 올린 것으로 봅니다(같은 작성자 재게시 규칙, 비공개 채널 보호 모두 그 회원 기준).
+  언급이 없으면 봇 자신이 작성자입니다.
+- 봇 계정이 아닌 웹훅이나 앱으로 올라오는 경우 `id` 옵션에 웹훅 ID나 애플리케이션 ID를 넣습니다.
+- 회원의 원래 글은 봇이 곧 지우므로, 등록한 봇이 있는 서버에서는 회원 글에 답하기 전에
+  `RELAY_GRACE_MS`(기본 4초) 기다렸다가 글이 남아 있을 때만 반응합니다. 지워지면 봇이 다시 올린 글에 반응합니다.
 
 ### 비슷한 기사 판정 (Claude, 선택)
 
@@ -120,7 +138,8 @@ Anthropic Console에서 이 봇 전용 키를 만들고 workspace 지출 한도�
 | `DEFAULT_MODE` | `forward` | `forward` / `reply` / `react` |
 | `DEFAULT_HAMMING_THRESHOLD` | `6` | 같은 사진으로 볼 dHash 차이 (64비트 중) |
 | `DEFAULT_SAME_AUTHOR_MINUTES` | `10` | 같은 작성자 재게시 무시 시간 (0 = 항상 감지) |
-| `RETENTION_DAYS` | `90` | 지문 보존 기간 |
+| `RETENTION_DAYS` | `90` | 지문 보존 기간 (0이면 삭제하지 않음). `/dupe backfill`도 이보다 오래된 메시지에서 멈춤 |
+| `RELAY_GRACE_MS` | `4000` | 링크 변환 봇이 등록된 서버에서 회원 글에 답하기 전 기다리는 시간 |
 | `IMAGE_MAX_BYTES` | `20971520` | 이보다 큰 이미지는 건너뜀 |
 | `IMAGE_MIN_SIZE` | `64` | 가로·세로 중 하나라도 이보다 작으면 건너뜀 (px) |
 | `ANTHROPIC_API_KEY` | (없음) | 있으면 의미 판정 사용 |
