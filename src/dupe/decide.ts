@@ -3,7 +3,8 @@ import type { ResponseKind } from '../store/types.ts';
 
 // How to answer a duplicate. Pure, so the privacy rule is easy to test.
 
-export type Action = 'forward' | 'reply' | 'react';
+/** sticker: a reply with the server's sticker and a link to the original; sticker-only: the sticker without the link */
+export type Action = 'forward' | 'reply' | 'react' | 'sticker' | 'sticker-only';
 
 export interface DecisionInput {
   mode: ResponseMode;
@@ -14,6 +15,8 @@ export interface DecisionInput {
   authorCanView: boolean;
   /** @everyone can read the original's channel */
   everyoneCanView: boolean;
+  /** the server has a usable sticker set (sticker mode falls back to a link reply without one) */
+  hasSticker?: boolean;
 }
 
 /**
@@ -24,7 +27,12 @@ export interface DecisionInput {
  */
 export function chooseAction(input: DecisionInput): Action {
   const shareable = input.sameChannel || (input.authorCanView && input.everyoneCanView);
-  if (input.mode === 'react' || !shareable) return 'react';
-  if (input.kind === 'semantic') return 'reply';
+  if (input.mode === 'react') return 'react';
+  if (input.mode === 'sticker' && input.kind === 'exact' && input.hasSticker) {
+    // the sticker reveals nothing about the original; only the link does
+    return shareable ? 'sticker' : 'sticker-only';
+  }
+  if (!shareable) return 'react';
+  if (input.kind === 'semantic' || input.mode === 'sticker') return 'reply';
   return input.mode;
 }

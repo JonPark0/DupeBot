@@ -54,7 +54,7 @@ docker compose logs -f dupe-bot
 
 | 명령 | 권한 | 설명 |
 |---|---|---|
-| `/dupe config` | 서버 관리 | 옵션 없이 실행하면 현재 설정 표시. `emoji`, `semantic_emoji`, `mode`(forward/reply/react), `threshold`(사진 유사도), `same_author_minutes`, `semantic`(Claude 판정 on/off) |
+| `/dupe config` | 서버 관리 | 옵션 없이 실행하면 현재 설정 표시. `emoji`, `semantic_emoji`, `mode`(forward/reply/react/sticker), `threshold`(사진 유사도), `same_author_minutes`, `semantic`(Claude 판정 on/off), `sticker`(스티커 이름, `none`=해제), `sticker_react` |
 | `/dupe channel` | 서버 관리 | `include`(감시 목록에 추가. 목록이 있으면 그 채널만 감시), `exclude`(제외), `remove`, `clear`(모든 채널 감시) |
 | `/dupe relay` | 서버 관리 | 링크 변환 봇 등록 (`add`/`remove`/`list`, `bot` 또는 `id`). 아래 [링크 변환 봇](#링크-변환-봇) 참고 |
 | `/dupe backfill` | 서버 관리 | 과거 메시지 색인 (기본 1000개, 최대 20000개, `RETENTION_DAYS`보다 오래된 메시지에서 멈춤). **반응은 달지 않습니다**. 진행 상황은 `/status`와 로그에 표시 |
@@ -72,8 +72,12 @@ docker compose logs -f dupe-bot
    - `forward` (기본): 이모지 + 원본 메시지를 바로 아래에 전달
    - `reply`: 이모지 + "이전에 올라온 게시물이에요: 링크 (작성자, 시각)" 답장 (알림 없음)
    - `react`: 이모지만
+   - `sticker`: 재게시 글에 답글로 **서버 스티커** + "이전에 올라온 게시물이에요: 링크 (작성자, 시각)".
+     `/dupe config mode:sticker sticker:스티커이름`으로 켭니다. 이 서버에 등록된 스티커만 쓸 수 있고,
+     이모지 반응은 `sticker_react:true`일 때만 함께 답니다. 스티커가 지정되지 않았거나 삭제됐으면 이모지와 링크 답장으로 대신합니다.
+     Claude가 판정한 비슷한 기사는 이 모드에서도 이모지와 링크 답장입니다.
 4. **비공개 채널 보호**: 원본이 다른 채널에 있고 @everyone 또는 새 작성자가 그 채널을 볼 수 없으면
-   전달·답장 없이 이모지만 답니다.
+   전달·답장 없이 이모지만 답니다 (`sticker` 모드에서는 링크 없이 스티커만).
 5. 감지하지 않는 것: 봇·웹훅 메시지(`/dupe relay`로 등록한 링크 변환 봇은 제외), 전달(Forward)된 메시지, tenor/giphy 반응 GIF, Discord 자체 링크,
    기사 미리보기 썸네일(사이트 로고가 여러 기사에 재사용되므로), 64px 미만 이미지,
    같은 작성자가 `same_author_minutes`(기본 10분) 안에 다시 올린 것
@@ -135,7 +139,7 @@ Anthropic Console에서 이 봇 전용 키를 만들고 workspace 지출 한도�
 | `DATABASE_URL` | compose가 생성 | Docker 밖에서 실행할 때만 직접 지정 |
 | `DEFAULT_EMOJI` | `🔁` | 중복 이모지 (서버별로 `/dupe config`에서 변경) |
 | `DEFAULT_SEMANTIC_EMOJI` | `🤔` | 비슷한 기사 이모지 |
-| `DEFAULT_MODE` | `forward` | `forward` / `reply` / `react` |
+| `DEFAULT_MODE` | `forward` | `forward` / `reply` / `react` / `sticker` (스티커는 서버별로 `/dupe config sticker:`로 지정) |
 | `DEFAULT_HAMMING_THRESHOLD` | `6` | 같은 사진으로 볼 dHash 차이 (64비트 중) |
 | `DEFAULT_SAME_AUTHOR_MINUTES` | `10` | 같은 작성자 재게시 무시 시간 (0 = 항상 감지) |
 | `RETENTION_DAYS` | `90` | 지문 보존 기간 (0이면 삭제하지 않음). `/dupe backfill`도 이보다 오래된 메시지에서 멈춤 |

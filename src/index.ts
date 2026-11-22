@@ -22,6 +22,8 @@ const store = new PgStore(config.databaseUrl, {
   includeChannels: [],
   excludeChannels: [],
   relayBots: [],
+  stickerId: null,
+  stickerReact: false,
 });
 
 // Postgres may still be starting when the bot does; retry instead of crash-looping.

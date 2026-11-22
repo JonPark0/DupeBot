@@ -48,6 +48,10 @@ export interface GuildSettings {
   excludeChannels: string[];
   /** bot / webhook / application IDs whose posts count as the member they mention (see dupe/relay.ts) */
   relayBots: string[];
+  /** server sticker sent in sticker mode */
+  stickerId: string | null;
+  /** also react with `emoji` in sticker mode */
+  stickerReact: boolean;
 }
 
 export type ResponseKind = 'exact' | 'semantic';

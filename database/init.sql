@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS guild_settings (
   guild_id            TEXT PRIMARY KEY,
   emoji               TEXT,
   semantic_emoji      TEXT,
-  mode                TEXT CHECK (mode IN ('forward', 'reply', 'react')),
+  mode                TEXT,
   hamming_threshold   INTEGER,
   same_author_minutes INTEGER,
   semantic_enabled    BOOLEAN NOT NULL DEFAULT TRUE,
@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS guild_settings (
 );
 -- Bots or webhooks whose posts count as the member they mention (link fixers). Added after the first release.
 ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS relay_bots TEXT[] NOT NULL DEFAULT '{}';
+-- Sticker mode (added later): the server sticker to reply with, and whether to react as well.
+ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS sticker_id TEXT;
+ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS sticker_react BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guild_settings DROP CONSTRAINT IF EXISTS guild_settings_mode_check;
+ALTER TABLE guild_settings ADD CONSTRAINT guild_settings_mode_check CHECK (mode IN ('forward', 'reply', 'react', 'sticker'));
 
 CREATE TABLE IF NOT EXISTS fingerprints (
   id          BIGSERIAL PRIMARY KEY,

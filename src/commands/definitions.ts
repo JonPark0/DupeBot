@@ -44,7 +44,12 @@ const dupe = new SlashCommandBuilder()
           .setDescription('반응 방식')
           .addChoices(
             ...RESPONSE_MODES.map((mode) => ({
-              name: { forward: 'forward (원본 전달)', reply: 'reply (링크 답장)', react: 'react (이모지만)' }[mode],
+              name: {
+                forward: 'forward (원본 전달)',
+                reply: 'reply (링크 답장)',
+                react: 'react (이모지만)',
+                sticker: 'sticker (스티커 + 링크 답장)',
+              }[mode],
               value: mode,
             })),
           ),
@@ -59,7 +64,11 @@ const dupe = new SlashCommandBuilder()
           .setMinValue(0)
           .setMaxValue(1440),
       )
-      .addBooleanOption((o) => o.setName('semantic').setDescription('Claude로 비슷한 기사 판정 사용')),
+      .addBooleanOption((o) => o.setName('semantic').setDescription('Claude로 비슷한 기사 판정 사용'))
+      .addStringOption((o) =>
+        o.setName('sticker').setDescription('sticker 모드에서 보낼 이 서버의 스티커 이름 또는 ID (none = 해제)'),
+      )
+      .addBooleanOption((o) => o.setName('sticker_react').setDescription('sticker 모드에서 이모지 반응도 함께 달기')),
   )
   .addSubcommand((sub) =>
     sub
