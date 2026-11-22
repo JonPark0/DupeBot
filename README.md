@@ -1,4 +1,4 @@
-# 유즈 (Yuzu) — Discord 중복 게시물 감지 봇
+# DupeBot: Discord 중복 게시물 감지 봇
 
 서버에 올라오는 글을 지켜보다가 **이전에 올라왔던 링크나 사진이 다시 올라오면** 이모지로 반응하고,
 원본 게시물을 바로 아래에 전달(Forward)하거나 링크로 답장합니다.
@@ -6,13 +6,13 @@
 - **링크**: 추적 파라미터·모바일 주소·embed 우회 도메인(fxtwitter 등)을 정규화해서 비교
 - **사진**: 같은 파일(SHA-256)뿐 아니라 재압축·크기 변경된 같은 사진(64비트 dHash)도 감지
 - **비슷한 기사 (선택)**: 다른 주소로 올라온 같은 기사·영상을 Claude(Haiku)가 판정
-  — API 키가 없거나 API가 실패해도 나머지 기능은 그대로 동작
+  (API 키가 없거나 API가 실패해도 나머지 기능은 그대로 동작)
 - 메시지 원문과 이미지 파일은 저장하지 않습니다 (해시, Discord ID, 시각, 링크 미리보기 제목·설명만 저장)
 
 ## 구성
 
 ```
-유즈 (TypeScript, Node.js 26, discord.js v14)
+DupeBot (TypeScript, Node.js 26, discord.js v14)
 ├── Discord Gateway (메시지 생성·수정·삭제 이벤트)
 ├── PostgreSQL 18 (전용 컨테이너, pg_trgm)
 └── Claude API (선택, 의미 기반 판정)
@@ -47,7 +47,7 @@ docker compose logs -f dupe-bot
 ```
 
 - 이미지는 GitHub Actions가 빌드해 `ghcr.io/jonpark0/dupebot`에 올립니다. 로컬 빌드: `docker compose up -d --build`
-- DB는 이 compose의 전용 `postgres:18-alpine` 컨테이너(`yuzu-postgres`)를 씁니다. 다른 봇의 DB와 공유하지 않습니다.
+- DB는 이 compose의 전용 `postgres:18-alpine` 컨테이너(`dupebot-postgres`)를 씁니다. 다른 봇의 DB와 공유하지 않습니다.
 - 스키마(`database/init.sql`)는 봇이 시작할 때마다 적용합니다(모두 `IF NOT EXISTS`). 백업 설정은 없습니다.
 
 ## 명령어
@@ -55,10 +55,10 @@ docker compose logs -f dupe-bot
 | 명령 | 권한 | 설명 |
 |---|---|---|
 | `/dupe config` | 서버 관리 | 옵션 없이 실행하면 현재 설정 표시. `emoji`, `semantic_emoji`, `mode`(forward/reply/react), `threshold`(사진 유사도), `same_author_minutes`, `semantic`(Claude 판정 on/off) |
-| `/dupe channel` | 서버 관리 | `include`(감시 목록에 추가 — 목록이 있으면 그 채널만 감시), `exclude`(제외), `remove`, `clear`(모든 채널 감시) |
+| `/dupe channel` | 서버 관리 | `include`(감시 목록에 추가. 목록이 있으면 그 채널만 감시), `exclude`(제외), `remove`, `clear`(모든 채널 감시) |
 | `/dupe backfill` | 서버 관리 | 과거 메시지 색인 (기본 1000개, 최대 20000개). **반응은 달지 않습니다** |
 | `/status` | 모두 | DB 상태, Claude 상태(켜짐/일시 중지/예산 소진/꺼짐), 오늘 사용량, 색인 수 |
-| 메시지 우클릭 → 앱 → **중복 아님** | 메시지 관리 | 유즈의 반응·전달·답장을 지우고, 그 링크·사진을 앞으로 중복으로 보지 않음 |
+| 메시지 우클릭 → 앱 → **중복 아님** | 메시지 관리 | DupeBot의 반응·전달·답장을 지우고, 그 링크·사진을 앞으로 중복으로 보지 않음 |
 
 스레드는 상위 채널의 감시/제외 설정을 따릅니다.
 
@@ -101,7 +101,7 @@ docker compose logs -f dupe-bot
 | 404 / 410 (모델 없음·폐기) | 판정 꺼짐, `ANTHROPIC_MODEL` 변경 후 재시작 필요 (`ERROR` 로그). 시작 시 한 번 호출해 미리 확인 |
 | 429 / 5xx / 시간 초과 / 네트워크 오류 | 60초간 판정 건너뜀 (`WARN` 로그) |
 | 거절(refusal), 출력 잘림, JSON 스키마 위반 | 그 링크만 판정 없이 넘어감 |
-| 오늘 사용액 ≥ `LLM_DAILY_BUDGET_USD` | 00:00 UTC까지 판정 건너뜀 |
+| 오늘 사용액이 `LLM_DAILY_BUDGET_USD` 이상 | 00:00 UTC까지 판정 건너뜀 |
 
 사용량(호출 수, 토큰, USD)은 DB의 `llm_usage` 테이블에 날짜별로 저장되고 `/status`에 표시됩니다.
 Anthropic Console에서 이 봇 전용 키를 만들고 workspace 지출 한도를 걸어 두면 2차 안전장치가 됩니다.
@@ -110,10 +110,10 @@ Anthropic Console에서 이 봇 전용 키를 만들고 workspace 지출 한도�
 
 | 변수 | 기본값 | 설명 |
 |---|---|---|
-| `DISCORD_TOKEN` | — | 봇 토큰 (필수) |
-| `DISCORD_CLIENT_ID` | — | Application ID (필수) |
-| `POSTGRES_PASSWORD` | — | DB 비밀번호 (필수, 영문·숫자·`-`·`_`만) |
-| `POSTGRES_USER` / `POSTGRES_DB` | `yuzu` | DB 사용자 / 이름 |
+| `DISCORD_TOKEN` | (없음) | 봇 토큰 (필수) |
+| `DISCORD_CLIENT_ID` | (없음) | Application ID (필수) |
+| `POSTGRES_PASSWORD` | (없음) | DB 비밀번호 (필수, 영문·숫자·`-`·`_`만) |
+| `POSTGRES_USER` / `POSTGRES_DB` | `dupebot` | DB 사용자 / 이름 |
 | `DATABASE_URL` | compose가 생성 | Docker 밖에서 실행할 때만 직접 지정 |
 | `DEFAULT_EMOJI` | `🔁` | 중복 이모지 (서버별로 `/dupe config`에서 변경) |
 | `DEFAULT_SEMANTIC_EMOJI` | `🤔` | 비슷한 기사 이모지 |
@@ -147,4 +147,4 @@ npm run dev         # src/index.ts 직접 실행 (Postgres 필요, .env 자동 �
 
 - 테스트 범위: URL 정규화, dHash·해밍 거리, 링크·이미지 수집 규칙, 매칭(같은 작성자·허용 목록·수정 이벤트),
   전달/답장/반응 결정(비공개 채널 보호), Claude 장애 처리(키 없음·인증 오류·429·404/410·거절·잘못된 JSON·예산)
-- 데이터 확인: `docker compose exec postgres psql -U yuzu -d yuzu -c "SELECT kind, count(*) FROM fingerprints GROUP BY kind;"`
+- 데이터 확인: `docker compose exec postgres psql -U dupebot -d dupebot -c "SELECT kind, count(*) FROM fingerprints GROUP BY kind;"`

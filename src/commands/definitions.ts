@@ -29,7 +29,7 @@ const MESSAGE_CHANNELS = TEXT_CHANNELS.filter(
 
 const dupe = new SlashCommandBuilder()
   .setName('dupe')
-  .setDescription('유즈 중복 게시물 감지 설정')
+  .setDescription('DupeBot 중복 게시물 감지 설정')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setContexts(InteractionContextType.Guild)
   .addSubcommand((sub) =>
@@ -93,7 +93,7 @@ const dupe = new SlashCommandBuilder()
 
 const status = new SlashCommandBuilder()
   .setName('status')
-  .setDescription('유즈 상태 (DB, Claude, 오늘 사용량)')
+  .setDescription('DupeBot 상태 (DB, Claude, 오늘 사용량)')
   .setContexts(InteractionContextType.Guild);
 
 const notDuplicate = new ContextMenuCommandBuilder()

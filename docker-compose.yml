@@ -9,17 +9,17 @@ services:
     labels:
       # deployed by hand from our own builds, so Diun needn't watch it
       diun.enable: "false"
-    container_name: yuzu-bot
+    container_name: dupebot
     restart: unless-stopped
     env_file: .env
     environment:
       # POSTGRES_PASSWORD goes into a URL here: use letters, digits, - and _ only
-      DATABASE_URL: postgres://${POSTGRES_USER:-yuzu}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-yuzu}
+      DATABASE_URL: postgres://${POSTGRES_USER:-dupebot}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-dupebot}
       NODE_OPTIONS: --max-old-space-size=192
     depends_on:
       postgres:
         condition: service_healthy
-    # The bot only makes outbound connections — no ports need to be published.
+    # The bot only makes outbound connections, no ports need to be published.
     deploy:
       resources:
         limits:
@@ -28,11 +28,11 @@ services:
   postgres:
     # Same image as the other bots, but its own container and volume (nothing is shared).
     image: postgres:18-alpine
-    container_name: yuzu-postgres
+    container_name: dupebot-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-yuzu}
-      POSTGRES_USER: ${POSTGRES_USER:-yuzu}
+      POSTGRES_DB: ${POSTGRES_DB:-dupebot}
+      POSTGRES_USER: ${POSTGRES_USER:-dupebot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       # Unicode-aware character classes, so pg_trgm also splits Korean/Japanese titles into trigrams
       POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8
@@ -40,7 +40,7 @@ services:
     volumes:
       # postgres:18+ keeps data in /var/lib/postgresql/<major>/docker and refuses to start
       # if anything is mounted at the old /var/lib/postgresql/data path.
-      - yuzu-postgres:/var/lib/postgresql
+      - dupebot-postgres:/var/lib/postgresql
     # The schema is applied by the bot on every start (database/init.sql, idempotent).
     expose:
       - "5432"
@@ -55,4 +55,4 @@ services:
       retries: 5
 
 volumes:
-  yuzu-postgres:
+  dupebot-postgres:

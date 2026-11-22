@@ -132,7 +132,7 @@ export class Bot {
 
       if (settings.semanticEnabled && semanticLinks.length && this.judge.isAvailable()) {
         for (const link of semanticLinks) {
-          if (!this.queue.push({ ref, link })) logger.debug(`[semantic] backlog full — skipped ${message.id}`);
+          if (!this.queue.push({ ref, link })) logger.debug(`[semantic] backlog full, skipped ${message.id}`);
         }
       }
     } catch (err) {
@@ -295,7 +295,7 @@ export class Bot {
       failed: '꺼짐 (모델 사용 불가)',
     }[llm.state];
     const embed = new EmbedBuilder()
-      .setTitle('유즈 상태')
+      .setTitle('DupeBot 상태')
       .addFields(
         { name: 'DB', value: dbOk ? '정상' : '연결 안 됨', inline: true },
         { name: 'Claude', value: `${llmText}${llm.reason && llm.state !== 'on' ? `\n${llm.reason}` : ''}`, inline: true },
@@ -318,7 +318,7 @@ export class Bot {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const responses = await this.store.responsesFor(target.id);
     if (responses.length === 0) {
-      await interaction.editReply('이 메시지에는 유즈가 반응하지 않았어요.');
+      await interaction.editReply('이 메시지에는 DupeBot이 반응하지 않았어요.');
       return;
     }
 

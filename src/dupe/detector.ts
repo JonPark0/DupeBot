@@ -12,7 +12,7 @@ export interface ExactMatch {
 export interface IndexResult {
   /** fingerprints seen for the first time on this message (new post, or embeds that arrived later) */
   fresh: Fingerprint[];
-  /** links whose preview text is known and new — what the semantic check looks at */
+  /** links whose preview text is known and new, what the semantic check looks at */
   semanticLinks: LinkItem[];
 }
 

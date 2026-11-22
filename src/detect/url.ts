@@ -132,7 +132,7 @@ export function normalizeUrl(input: string): string | null {
   return `${host}${port}${path}${query}`;
 }
 
-/** sha256 (hex) of the normalized URL — the key stored in the index. */
+/** sha256 (hex) of the normalized URL, the key stored in the index. */
 export function urlKey(normalized: string): string {
   return createHash('sha256').update(normalized).digest('hex');
 }

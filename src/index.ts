@@ -33,7 +33,7 @@ for (let attempt = 1; ; attempt++) {
       logger.error('[db] could not reach Postgres:', err);
       process.exit(1);
     }
-    logger.warn(`[db] Postgres not ready (${(err as Error).message}) — retrying in 3 s`);
+    logger.warn(`[db] Postgres not ready (${(err as Error).message}), retrying in 3 s`);
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 }
@@ -143,7 +143,7 @@ await purge();
 setInterval(purge, DAY_MS).unref();
 
 async function shutdown(signal: string) {
-  logger.info(`[bot] ${signal} — shutting down`);
+  logger.info(`[bot] ${signal}, shutting down`);
   await client.destroy();
   await store.close().catch(() => undefined);
   process.exit(0);

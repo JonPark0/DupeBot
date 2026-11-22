@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Yuzu (유즈) — Discord bot that spots reposted links and images",
+  "description": "DupeBot: Discord bot that spots reposted links and images",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

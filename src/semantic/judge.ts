@@ -161,18 +161,18 @@ export class SemanticJudge {
   onError(err: unknown): void {
     if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
       this.pause(AUTH_COOLDOWN_MS, `auth error ${err.status}`);
-      logger.error(`[llm] Claude rejected the key (${err.status}) — semantic matching paused for 30 min. Check ANTHROPIC_API_KEY.`);
+      logger.error(`[llm] Claude rejected the key (${err.status}), semantic matching paused for 30 min. Check ANTHROPIC_API_KEY.`);
     } else if (err instanceof Anthropic.NotFoundError || (err instanceof Anthropic.APIError && err.status === 410)) {
       this.state = 'failed';
       this.reason = `model ${this.model} unavailable (${err.status})`;
-      logger.error(`[llm] model ${this.model} returned ${err.status} — semantic matching is off. Set ANTHROPIC_MODEL to a current model and restart.`);
+      logger.error(`[llm] model ${this.model} returned ${err.status}, semantic matching is off. Set ANTHROPIC_MODEL to a current model and restart.`);
     } else if (err instanceof Anthropic.BadRequestError) {
       this.pause(AUTH_COOLDOWN_MS, `bad request: ${err.message.slice(0, 200)}`);
-      logger.error(`[llm] request rejected (400): ${err.message.slice(0, 300)} — semantic matching paused for 30 min`);
+      logger.error(`[llm] request rejected (400): ${err.message.slice(0, 300)}, semantic matching paused for 30 min`);
     } else {
       const status = err instanceof Anthropic.APIError ? (err.status ?? 'network') : 'error';
       this.pause(TRANSIENT_COOLDOWN_MS, `transient ${status}`);
-      logger.warn(`[llm] Claude call failed (${status}: ${(err as Error).message?.slice(0, 200)}) — semantic matching paused for 60 s`);
+      logger.warn(`[llm] Claude call failed (${status}: ${(err as Error).message?.slice(0, 200)}), semantic matching paused for 60 s`);
     }
   }
 
@@ -188,7 +188,7 @@ export class SemanticJudge {
    */
   async probe(): Promise<void> {
     if (!this.client) {
-      logger.info('[llm] ANTHROPIC_API_KEY not set — semantic matching disabled (exact matching unaffected)');
+      logger.info('[llm] ANTHROPIC_API_KEY not set, semantic matching disabled (exact matching unaffected)');
       return;
     }
     try {
@@ -200,7 +200,7 @@ export class SemanticJudge {
         messages: [{ role: 'user', content: 'Reply with OK.' }],
       });
       await this.recordUsage(message);
-      logger.info(`[llm] Claude ${this.model} reachable — semantic matching on`);
+      logger.info(`[llm] Claude ${this.model} reachable, semantic matching on`);
     } catch (err) {
       this.onError(err);
     }
@@ -211,7 +211,7 @@ export class SemanticJudge {
     if (!this.client || candidates.length === 0 || !this.isAvailable()) return null;
     await this.loadUsage();
     if (this.budgetSpent()) {
-      logger.debug(`[llm] daily budget $${this.dailyBudgetUsd} spent — skipping`);
+      logger.debug(`[llm] daily budget $${this.dailyBudgetUsd} spent, skipping`);
       return null;
     }
     if (this.state === 'cooldown') this.state = 'on';
@@ -239,13 +239,13 @@ export class SemanticJudge {
     await this.recordUsage(message);
 
     if (message.stop_reason !== 'end_turn' && message.stop_reason !== 'stop_sequence') {
-      logger.warn(`[llm] unusable answer (stop_reason=${message.stop_reason}) — not flagging`);
+      logger.warn(`[llm] unusable answer (stop_reason=${message.stop_reason}), not flagging`);
       return null;
     }
     const text = message.content.find((block) => block.type === 'text');
     const verdict = text && text.type === 'text' ? parseVerdict(text.text, candidates.length) : null;
     if (!verdict) {
-      logger.warn('[llm] answer did not match the schema — not flagging');
+      logger.warn('[llm] answer did not match the schema, not flagging');
       return null;
     }
     if (verdict.index === null) return null;

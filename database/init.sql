@@ -1,4 +1,4 @@
--- Yuzu (DupeBot) schema. The bot applies this file on every start; every statement is idempotent.
+-- DupeBot schema. The bot applies this file on every start; every statement is idempotent.
 -- Only fingerprints are stored: hashes, Discord IDs and timestamps, plus the embed title and
 -- description of links (for semantic matching). No message text, no image files.
 
