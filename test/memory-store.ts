@@ -22,6 +22,8 @@ export const DEFAULT_SETTINGS: GuildSettings = {
   includeChannels: [],
   excludeChannels: [],
   relayBots: [],
+  stickerId: null,
+  stickerReact: false,
 };
 
 interface Row extends MessageRef, Fingerprint {}

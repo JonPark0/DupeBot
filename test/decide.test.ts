@@ -25,6 +25,25 @@ test('a semantic match gets a link reply, never a forward', () => {
   assert.equal(chooseAction({ ...base, kind: 'semantic', everyoneCanView: false }), 'react');
 });
 
+test('sticker mode replies with the sticker and a link, or the sticker alone when the original is private', () => {
+  const sticker = { ...base, mode: 'sticker', hasSticker: true } as const;
+  assert.equal(chooseAction(sticker), 'sticker');
+  assert.equal(chooseAction({ ...sticker, everyoneCanView: false }), 'sticker-only');
+  assert.equal(chooseAction({ ...sticker, authorCanView: false }), 'sticker-only');
+  assert.equal(chooseAction({ ...sticker, sameChannel: true, everyoneCanView: false }), 'sticker');
+});
+
+test('sticker mode without a usable sticker falls back to a link reply', () => {
+  assert.equal(chooseAction({ ...base, mode: 'sticker', hasSticker: false }), 'reply');
+  assert.equal(chooseAction({ ...base, mode: 'sticker' }), 'reply');
+  assert.equal(chooseAction({ ...base, mode: 'sticker', everyoneCanView: false }), 'react');
+});
+
+test('a semantic match in sticker mode keeps the emoji and link reply', () => {
+  assert.equal(chooseAction({ ...base, mode: 'sticker', kind: 'semantic', hasSticker: true }), 'reply');
+  assert.equal(chooseAction({ ...base, mode: 'sticker', kind: 'semantic', hasSticker: true, everyoneCanView: false }), 'react');
+});
+
 test('the semantic queue runs one job at a time and drops jobs past the backlog', async () => {
   let running = 0;
   let maxRunning = 0;

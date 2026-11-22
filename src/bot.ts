@@ -287,10 +287,10 @@ export class Bot {
       if (action === 'add') relayBots.push(id);
     }
     const settings = action === 'list' ? current : await this.store.updateSettings(interaction.guildId, { relayBots });
-    await interaction.reply({ content: this.describeSettings(settings), flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: this.describeSettings(settings, interaction.guildId), flags: MessageFlags.Ephemeral });
   }
 
-  describeSettings(settings: GuildSettings): string {
+  describeSettings(settings: GuildSettings, guildId: string): string {
     const channels = (ids: string[]) => (ids.length ? ids.map((id) => `<#${id}>`).join(' ') : '없음');
     return [
       `이모지: ${settings.emoji} (비슷한 내용: ${settings.semanticEmoji})`,
@@ -301,6 +301,8 @@ export class Bot {
       `감시 채널: ${settings.includeChannels.length ? channels(settings.includeChannels) : '전체'}`,
       `제외 채널: ${channels(settings.excludeChannels)}`,
       `링크 변환 봇(relay): ${settings.relayBots.length ? settings.relayBots.map((id) => `<@${id}>`).join(' ') : '없음'}`,
+      `스티커: ${settings.stickerId ? (this.client.guilds.cache.get(guildId)?.stickers.cache.get(settings.stickerId)?.name ?? `${settings.stickerId} (서버에서 찾을 수 없음)`) : '없음'}` +
+        (settings.mode === 'sticker' ? ` (이모지 반응 ${settings.stickerReact ? '함께 달기' : '안 달기'})` : ''),
     ].join('\n');
   }
 
@@ -312,17 +314,38 @@ export class Bot {
     const threshold = interaction.options.getInteger('threshold');
     const sameAuthor = interaction.options.getInteger('same_author_minutes');
     const semantic = interaction.options.getBoolean('semantic');
+    const sticker = interaction.options.getString('sticker')?.trim();
+    const stickerReact = interaction.options.getBoolean('sticker_react');
     if (emoji) patch.emoji = emoji.trim();
     if (semanticEmoji) patch.semanticEmoji = semanticEmoji.trim();
     if (mode) patch.mode = mode as ResponseMode;
     if (threshold !== null) patch.hammingThreshold = threshold;
     if (sameAuthor !== null) patch.sameAuthorMinutes = sameAuthor;
     if (semantic !== null) patch.semanticEnabled = semantic;
+    if (stickerReact !== null) patch.stickerReact = stickerReact;
+    if (sticker) {
+      if (sticker.toLowerCase() === 'none') {
+        patch.stickerId = null;
+      } else {
+        const stickers = await interaction.guild.stickers.fetch();
+        const found =
+          stickers.get(sticker) ?? stickers.find((s) => s.name.toLowerCase() === sticker.toLowerCase());
+        if (!found) {
+          const names = stickers.map((s) => s.name).join(', ') || '없음';
+          await interaction.reply({
+            content: `이 서버에서 \`${sticker}\` 스티커를 찾지 못했어요. 사용할 수 있는 스티커: ${names}`,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        patch.stickerId = found.id;
+      }
+    }
 
     const settings = Object.keys(patch).length
       ? await this.store.updateSettings(interaction.guildId, patch)
       : await this.store.getSettings(interaction.guildId);
-    await interaction.reply({ content: this.describeSettings(settings), flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: this.describeSettings(settings, interaction.guildId), flags: MessageFlags.Ephemeral });
   }
 
   async channel(interaction: ChatInputCommandInteraction<'cached'>): Promise<void> {
@@ -346,7 +369,7 @@ export class Bot {
       if (action === 'exclude') excludeChannels.push(channel.id);
     }
     const settings = await this.store.updateSettings(interaction.guildId, { includeChannels, excludeChannels });
-    await interaction.reply({ content: this.describeSettings(settings), flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: this.describeSettings(settings, interaction.guildId), flags: MessageFlags.Ephemeral });
   }
 
   async backfill(interaction: ChatInputCommandInteraction<'cached'>): Promise<void> {
