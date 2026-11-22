@@ -19,6 +19,7 @@ story posted under a different URL. Self-hosted with Docker Compose on an arm64 
 - [src/dupe/detector.ts](src/dupe/detector.ts): index a message, find the earliest match
 - [src/dupe/decide.ts](src/dupe/decide.ts): forward / reply / react, including the private-channel rule
 - [src/dupe/respond.ts](src/dupe/respond.ts): the Discord side of a response
+- [src/dupe/relay.ts](src/dupe/relay.ts): which bot posts count (link-fixer relay bots) and as whom
 - [src/semantic/judge.ts](src/semantic/judge.ts): Claude call with cooldowns, daily budget, startup probe; every failure returns null
 - [src/store/](src/store/): `Store` interface and `PgStore`; tests use `test/memory-store.ts`
 - [database/init.sql](database/init.sql): schema, applied by the bot on every start (idempotent)
@@ -49,3 +50,5 @@ docker compose exec postgres psql -U dupebot -d dupebot
 - Only fingerprints are stored (hashes, IDs, timestamps, link preview title/description); no message text, no images.
 - Never forward or link an original the repost's audience can't see (`chooseAction`).
 - Backfill indexes without reacting.
+- Bot and webhook posts are ignored unless the guild lists them with `/dupe relay`; a listed bot's post
+  counts as the first member it mentions (`src/dupe/relay.ts`).

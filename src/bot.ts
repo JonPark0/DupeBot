@@ -12,6 +12,7 @@ import type { ResponseMode } from './modes.ts';
 import { NOT_DUPLICATE } from './commands/definitions.ts';
 import type { LinkItem, MessageLike } from './detect/collect.ts';
 import { channelWatched, type Detector } from './dupe/detector.ts';
+import { classifySource, type Source } from './dupe/relay.ts';
 import { respondToDuplicate } from './dupe/respond.ts';
 import { findSemanticMatch, type SemanticOptions } from './dupe/semantic.ts';
 import { logger } from './logger.ts';
@@ -44,15 +45,34 @@ export function toMessageLike(message: Message): MessageLike {
   };
 }
 
-function refOf(message: Message<true>): MessageRef {
+function refOf(message: Message<true>, authorId: string): MessageRef {
   return {
     guildId: message.guildId,
     channelId: message.channelId,
     messageId: message.id,
-    authorId: message.author.id,
+    authorId,
     postedAt: message.createdAt,
   };
 }
+
+function sourceOf(message: Message<true>, relayBots: readonly string[]): Source {
+  if (message.system) return { kind: 'ignored' };
+  // a forward is a deliberate quote of an earlier message, not a repost
+  if (message.reference?.type === MessageReferenceType.Forward) return { kind: 'ignored' };
+  return classifySource(
+    {
+      authorId: message.author.id,
+      authorIsBot: message.author.bot,
+      webhookId: message.webhookId,
+      applicationId: message.applicationId,
+      mentionedUserIds: [...message.mentions.users.values()].filter((u) => !u.bot).map((u) => u.id),
+    },
+    relayBots,
+    message.client.user?.id ?? null,
+  );
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export interface BotOptions {
   client: Client;
@@ -61,6 +81,16 @@ export interface BotOptions {
   judge: SemanticJudge;
   semantic: SemanticOptions;
   semanticMaxBacklog: number;
+  startedAt: number;
+  retentionDays: number;
+  relayGraceMs: number;
+}
+
+interface BackfillProgress {
+  channelId: string;
+  scanned: number;
+  indexed: number;
+  oldest: Date | null;
   startedAt: number;
 }
 
@@ -72,8 +102,11 @@ export class Bot {
   semantic: SemanticOptions;
   queue: BoundedQueue<SemanticJob>;
   startedAt: number;
+  retentionDays: number;
+  relayGraceMs: number;
   responded = new Set<string>();
-  backfilling = new Set<string>();
+  /** running backfills by guild, shown in /status */
+  backfilling = new Map<string, BackfillProgress>();
 
   constructor(options: BotOptions) {
     this.client = options.client;
@@ -82,6 +115,8 @@ export class Bot {
     this.judge = options.judge;
     this.semantic = options.semantic;
     this.startedAt = options.startedAt;
+    this.retentionDays = options.retentionDays;
+    this.relayGraceMs = options.relayGraceMs;
     this.queue = new BoundedQueue((job) => this.runSemantic(job), options.semanticMaxBacklog);
   }
 
@@ -93,13 +128,29 @@ export class Bot {
     }
   }
 
-  async watchedSettings(message: Message<true>): Promise<GuildSettings | null> {
-    if (message.author.bot || message.system || message.webhookId) return null;
-    // a forward is a deliberate quote of an earlier message, not a repost
-    if (message.reference?.type === MessageReferenceType.Forward) return null;
+  async watched(message: Message<true>): Promise<{ settings: GuildSettings; source: Exclude<Source, { kind: 'ignored' }> } | null> {
+    if (message.system) return null;
     const settings = await this.store.getSettings(message.guildId);
+    const source = sourceOf(message, settings.relayBots);
+    if (source.kind === 'ignored') return null;
     const parentId = message.channel.isThread() ? message.channel.parentId : null;
-    return channelWatched(settings, message.channelId, parentId) ? settings : null;
+    return channelWatched(settings, message.channelId, parentId) ? { settings, source } : null;
+  }
+
+  /** The member whose channel access decides what may be shared in an answer. */
+  viewerOf(message: Message<true>, source: Exclude<Source, { kind: 'ignored' }>) {
+    if (source.kind === 'member') return message.member ?? message.author.id;
+    return message.mentions.members?.get(source.authorId) ?? source.authorId;
+  }
+
+  /** False when the message was deleted (or can't be read any more). */
+  async stillExists(message: Message<true>): Promise<boolean> {
+    try {
+      await message.channel.messages.fetch({ message: message.id, force: true });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** messageCreate and messageUpdate (edits, and embeds Discord attaches a moment later). */
@@ -107,10 +158,11 @@ export class Bot {
     try {
       if (message.partial) message = await message.fetch();
       if (!message.inGuild()) return;
-      const settings = await this.watchedSettings(message);
-      if (!settings) return;
+      const watched = await this.watched(message);
+      if (!watched) return;
+      const { settings, source } = watched;
 
-      const ref = refOf(message);
+      const ref = refOf(message, source.authorId);
       const { fresh, semanticLinks } = await this.detector.index(ref, toMessageLike(message));
       if (this.responded.has(message.id)) return;
       if ((fresh.length || semanticLinks.length) && (await this.store.responsesFor(message.id)).length) {
@@ -118,11 +170,25 @@ export class Bot {
         return;
       }
 
+      if (fresh.length && source.kind === 'member' && settings.relayBots.length && this.relayGraceMs > 0) {
+        // A relay bot may be about to delete this post and repost the link; answer the repost instead.
+        await sleep(this.relayGraceMs);
+        if (!(await this.stillExists(message))) return;
+      }
+
       if (fresh.length) {
         for (let attempt = 0; attempt < STALE_RETRIES; attempt++) {
           const match = await this.detector.findMatch(ref, fresh, settings);
           if (!match) break;
-          const outcome = await respondToDuplicate(this.client, this.store, message, match.hit, 'exact', settings);
+          const outcome = await respondToDuplicate(
+            this.client,
+            this.store,
+            message,
+            match.hit,
+            'exact',
+            settings,
+            this.viewerOf(message, source),
+          );
           if (outcome === 'stale') continue; // original was deleted; it's gone from the index now, try the next one
           this.markResponded(message.id);
           logger.info(`[dupe] ${message.id} repeats ${match.hit.messageId} (${match.reason})`);
@@ -155,7 +221,17 @@ export class Bot {
       return; // deleted meanwhile
     }
     if (!message.inGuild()) return;
-    const outcome = await respondToDuplicate(this.client, this.store, message, match.candidate, 'semantic', settings);
+    const source = sourceOf(message, settings.relayBots);
+    if (source.kind === 'ignored') return;
+    const outcome = await respondToDuplicate(
+      this.client,
+      this.store,
+      message,
+      match.candidate,
+      'semantic',
+      settings,
+      this.viewerOf(message, source),
+    );
     if (outcome === 'done') {
       this.markResponded(message.id);
       logger.info(
@@ -167,8 +243,20 @@ export class Bot {
   async onMessageDelete(message: Message | PartialMessage): Promise<void> {
     try {
       await this.store.removeMessage(message.id);
+      // The repost is gone, so the original we forwarded or linked below it would dangle: remove it.
+      const responses = await this.store.responsesFor(message.id);
+      for (const response of responses) {
+        if (!response.botMessageId) continue;
+        try {
+          const channel = await this.client.channels.fetch(response.channelId);
+          if (channel?.isTextBased()) await channel.messages.delete(response.botMessageId);
+        } catch {
+          /* already gone */
+        }
+      }
+      if (responses.length) await this.store.deleteResponses(message.id);
     } catch (err) {
-      logger.warn(`[dupe] could not remove deleted message ${message.id}: ${(err as Error).message}`);
+      logger.warn(`[dupe] could not clean up deleted message ${message.id}: ${(err as Error).message}`);
     }
   }
 
@@ -182,6 +270,24 @@ export class Bot {
     if (sub === 'config') return this.config(interaction);
     if (sub === 'channel') return this.channel(interaction);
     if (sub === 'backfill') return this.backfill(interaction);
+    if (sub === 'relay') return this.relay(interaction);
+  }
+
+  async relay(interaction: ChatInputCommandInteraction<'cached'>): Promise<void> {
+    const action = interaction.options.getString('action', true);
+    const id = interaction.options.getUser('bot')?.id ?? interaction.options.getString('id')?.trim() ?? null;
+    const current = await this.store.getSettings(interaction.guildId);
+    let relayBots = current.relayBots.slice();
+    if (action !== 'list') {
+      if (!id || !/^\d{5,25}$/.test(id)) {
+        await interaction.reply({ content: '`bot` 또는 `id`(숫자 ID)를 지정해 주세요.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+      relayBots = relayBots.filter((existing) => existing !== id);
+      if (action === 'add') relayBots.push(id);
+    }
+    const settings = action === 'list' ? current : await this.store.updateSettings(interaction.guildId, { relayBots });
+    await interaction.reply({ content: this.describeSettings(settings), flags: MessageFlags.Ephemeral });
   }
 
   describeSettings(settings: GuildSettings): string {
@@ -194,6 +300,7 @@ export class Bot {
       `Claude 의미 기반 판정: ${settings.semanticEnabled ? '켜짐' : '꺼짐'}`,
       `감시 채널: ${settings.includeChannels.length ? channels(settings.includeChannels) : '전체'}`,
       `제외 채널: ${channels(settings.excludeChannels)}`,
+      `링크 변환 봇(relay): ${settings.relayBots.length ? settings.relayBots.map((id) => `<@${id}>`).join(' ') : '없음'}`,
     ].join('\n');
   }
 
@@ -249,34 +356,62 @@ export class Bot {
       await interaction.reply({ content: '메시지를 읽을 수 있는 채널이 아니에요.', flags: MessageFlags.Ephemeral });
       return;
     }
-    if (this.backfilling.has(interaction.guildId)) {
-      await interaction.reply({ content: '이미 색인 중이에요. 끝난 뒤에 다시 실행해 주세요.', flags: MessageFlags.Ephemeral });
+    const running = this.backfilling.get(interaction.guildId);
+    if (running) {
+      await interaction.reply({
+        content: `<#${running.channelId}> 색인이 진행 중이에요 (${running.scanned}개 확인). 끝난 뒤에 다시 실행해 주세요.`,
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
-    this.backfilling.add(interaction.guildId);
+    const progress: BackfillProgress = { channelId: channel.id, scanned: 0, indexed: 0, oldest: null, startedAt: Date.now() };
+    this.backfilling.set(interaction.guildId, progress);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    let scanned = 0;
-    let indexed = 0;
+    // The reply can only be edited for 15 minutes; a long backfill keeps going and reports in the log and /status.
+    const update = async (text: string) => {
+      try {
+        await interaction.editReply(text);
+      } catch {
+        /* interaction token expired */
+      }
+    };
+    const cutoff = this.retentionDays > 0 ? Date.now() - this.retentionDays * 86_400_000 : 0;
+    const settings = await this.store.getSettings(interaction.guildId);
+    let reachedCutoff = false;
     let before: string | undefined;
+    logger.info(`[backfill] #${channel.name} started (up to ${limit} messages)`);
     try {
-      while (scanned < limit) {
-        const batch = await channel.messages.fetch({ limit: Math.min(100, limit - scanned), before });
+      while (progress.scanned < limit && !reachedCutoff) {
+        const batch = await channel.messages.fetch({ limit: Math.min(100, limit - progress.scanned), before });
         if (batch.size === 0) break;
         for (const message of batch.values()) {
-          scanned++;
-          if (!message.inGuild() || message.author.bot || message.system) continue;
-          if (message.reference?.type === MessageReferenceType.Forward) continue;
-          const { fresh } = await this.detector.index(refOf(message), toMessageLike(message));
-          if (fresh.length) indexed++;
+          if (message.createdTimestamp < cutoff) {
+            reachedCutoff = true;
+            break;
+          }
+          progress.scanned++;
+          progress.oldest = message.createdAt;
+          if (!message.inGuild()) continue;
+          const source = sourceOf(message, settings.relayBots);
+          if (source.kind === 'ignored') continue;
+          const { fresh } = await this.detector.index(refOf(message, source.authorId), toMessageLike(message));
+          if (fresh.length) progress.indexed++;
         }
         before = batch.last()?.id;
-        if (scanned % 500 < 100) await interaction.editReply(`<#${channel.id}> 색인 중… ${scanned}개 확인`);
+        if (progress.scanned % 500 < 100) {
+          const until = progress.oldest ? `<t:${Math.floor(progress.oldest.getTime() / 1000)}:d>` : '';
+          logger.info(`[backfill] #${channel.name}: ${progress.scanned} checked, ${progress.indexed} indexed, back to ${progress.oldest?.toISOString().slice(0, 10)}`);
+          await update(`<#${channel.id}> 색인 중… ${progress.scanned}개 확인, ${until}까지`);
+        }
       }
-      await interaction.editReply(`<#${channel.id}> 색인 완료: 메시지 ${scanned}개 확인, ${indexed}개에서 링크·이미지 저장`);
+      const tail = reachedCutoff ? ` (보관 기간 ${this.retentionDays}일보다 오래된 메시지에서 멈춤)` : '';
+      const summary = `<#${channel.id}> 색인 완료: 메시지 ${progress.scanned}개 확인, ${progress.indexed}개에서 링크·이미지 저장${tail}`;
+      logger.info(`[backfill] #${channel.name} done: ${progress.scanned} checked, ${progress.indexed} indexed${reachedCutoff ? ', stopped at the retention window' : ''}`);
+      await update(summary);
     } catch (err) {
       logger.error('[backfill] failed:', err);
-      await interaction.editReply(`색인 중 오류가 났어요 (${scanned}개까지 처리): ${(err as Error).message}`);
+      await update(`색인 중 오류가 났어요 (${progress.scanned}개까지 처리): ${(err as Error).message}`);
     } finally {
       this.backfilling.delete(interaction.guildId);
     }
@@ -308,6 +443,14 @@ export class Bot {
         { name: '의미 판정 대기열', value: `${this.queue.size}건 (버림 ${this.queue.dropped}건)`, inline: true },
         { name: '가동 시작', value: `<t:${Math.floor(this.startedAt / 1000)}:R>`, inline: true },
       );
+    const backfill = this.backfilling.get(interaction.guildId);
+    if (backfill) {
+      const until = backfill.oldest ? `, <t:${Math.floor(backfill.oldest.getTime() / 1000)}:d>까지` : '';
+      embed.addFields({
+        name: '과거 메시지 색인 (진행 중)',
+        value: `<#${backfill.channelId}>: ${backfill.scanned}개 확인, ${backfill.indexed}개 저장${until} (시작 <t:${Math.floor(backfill.startedAt / 1000)}:R>)`,
+      });
+    }
     await interaction.editReply({ embeds: [embed] });
   }
 

@@ -1,5 +1,6 @@
 import {
   type Client,
+  type GuildMember,
   type GuildTextBasedChannel,
   type Message,
   PermissionFlagsBits,
@@ -46,6 +47,8 @@ export async function respondToDuplicate(
   hit: MessageRef,
   kind: ResponseKind,
   settings: GuildSettings,
+  /** whose access decides what may be shared: the poster, or the member a relay bot posted for */
+  viewer: GuildMember | string,
 ): Promise<RespondOutcome> {
   let original;
   try {
@@ -64,7 +67,7 @@ export async function respondToDuplicate(
     mode: settings.mode,
     kind,
     sameChannel: original.channel.id === message.channelId,
-    authorCanView: original.channel.permissionsFor(message.member ?? message.author.id)?.has(VIEW) ?? false,
+    authorCanView: original.channel.permissionsFor(viewer)?.has(VIEW) ?? false,
     everyoneCanView: original.channel.permissionsFor(everyone)?.has(VIEW) ?? false,
   });
   const emoji = kind === 'semantic' ? settings.semanticEmoji : settings.emoji;
@@ -86,7 +89,7 @@ export async function respondToDuplicate(
       const when = Math.floor(original.message.createdTimestamp / 1000);
       const lead = kind === 'semantic' ? '비슷한 내용이 이전에 올라왔어요' : '이전에 올라온 게시물이에요';
       sent = await message.reply({
-        content: `${emoji} ${lead}: ${original.message.url} (<@${original.message.author.id}>, <t:${when}:R>)`,
+        content: `${emoji} ${lead}: ${original.message.url} (<@${hit.authorId}>, <t:${when}:R>)`,
         allowedMentions: { parse: [], repliedUser: false },
       });
     }

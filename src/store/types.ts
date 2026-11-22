@@ -46,6 +46,8 @@ export interface GuildSettings {
   /** empty = every channel */
   includeChannels: string[];
   excludeChannels: string[];
+  /** bot / webhook / application IDs whose posts count as the member they mention (see dupe/relay.ts) */
+  relayBots: string[];
 }
 
 export type ResponseKind = 'exact' | 'semantic';

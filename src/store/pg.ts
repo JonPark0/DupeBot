@@ -86,6 +86,7 @@ export class PgStore implements Store {
           semanticEnabled: row.semantic_enabled,
           includeChannels: row.include_channels,
           excludeChannels: row.exclude_channels,
+          relayBots: row.relay_bots ?? [],
         }
       : { ...this.defaults };
     this.settingsCache.set(guildId, settings);
@@ -96,13 +97,13 @@ export class PgStore implements Store {
     const next = { ...(await this.getSettings(guildId)), ...patch };
     await this.pool.query(
       `INSERT INTO guild_settings (guild_id, emoji, semantic_emoji, mode, hamming_threshold, same_author_minutes,
-                                   semantic_enabled, include_channels, exclude_channels, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+                                   semantic_enabled, include_channels, exclude_channels, relay_bots, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
        ON CONFLICT (guild_id) DO UPDATE SET
          emoji = EXCLUDED.emoji, semantic_emoji = EXCLUDED.semantic_emoji, mode = EXCLUDED.mode,
          hamming_threshold = EXCLUDED.hamming_threshold, same_author_minutes = EXCLUDED.same_author_minutes,
          semantic_enabled = EXCLUDED.semantic_enabled, include_channels = EXCLUDED.include_channels,
-         exclude_channels = EXCLUDED.exclude_channels, updated_at = now()`,
+         exclude_channels = EXCLUDED.exclude_channels, relay_bots = EXCLUDED.relay_bots, updated_at = now()`,
       [
         guildId,
         next.emoji,
@@ -113,6 +114,7 @@ export class PgStore implements Store {
         next.semanticEnabled,
         next.includeChannels,
         next.excludeChannels,
+        next.relayBots,
       ],
     );
     this.settingsCache.set(guildId, next);

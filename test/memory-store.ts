@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: GuildSettings = {
   semanticEnabled: true,
   includeChannels: [],
   excludeChannels: [],
+  relayBots: [],
 };
 
 interface Row extends MessageRef, Fingerprint {}

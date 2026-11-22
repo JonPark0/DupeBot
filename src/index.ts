@@ -21,6 +21,7 @@ const store = new PgStore(config.databaseUrl, {
   semanticEnabled: true,
   includeChannels: [],
   excludeChannels: [],
+  relayBots: [],
 });
 
 // Postgres may still be starting when the bot does; retry instead of crash-looping.
@@ -77,6 +78,8 @@ const bot = new Bot({
     minConfidence: config.semanticMinConfidence,
   },
   semanticMaxBacklog: config.semanticMaxBacklog,
+  retentionDays: config.retentionDays,
+  relayGraceMs: config.relayGraceMs,
   startedAt: Date.now(),
 });
 

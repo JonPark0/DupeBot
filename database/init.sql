@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS guild_settings (
   exclude_channels    TEXT[] NOT NULL DEFAULT '{}',
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Bots or webhooks whose posts count as the member they mention (link fixers). Added after the first release.
+ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS relay_bots TEXT[] NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS fingerprints (
   id          BIGSERIAL PRIMARY KEY,
