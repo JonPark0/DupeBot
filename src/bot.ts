@@ -453,14 +453,14 @@ export class Bot {
       failed: '꺼짐 (모델 사용 불가)',
     }[llm.state];
     const embed = new EmbedBuilder()
-      .setTitle('DupeBot 상태')
+      .setTitle('중복 감지 상태')
       .addFields(
         { name: 'DB', value: dbOk ? '정상' : '연결 안 됨', inline: true },
         { name: 'Claude', value: `${llmText}${llm.reason && llm.state !== 'on' ? `\n${llm.reason}` : ''}`, inline: true },
         { name: '오늘 Claude 사용량', value: `${llm.todayCalls}회 · $${llm.todayUsd.toFixed(4)}`, inline: true },
         {
           name: '색인',
-          value: counts ? `링크 ${counts.urls}개 · 이미지 ${counts.images}개` : '-',
+          value: counts ? `링크 ${counts.urls}개 · 이미지 ${counts.images}개 · 동영상 ${counts.files}개` : '-',
           inline: true,
         },
         { name: '의미 판정 대기열', value: `${this.queue.size}건 (버림 ${this.queue.dropped}건)`, inline: true },
@@ -484,7 +484,7 @@ export class Bot {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const responses = await this.store.responsesFor(target.id);
     if (responses.length === 0) {
-      await interaction.editReply('이 메시지에는 DupeBot이 반응하지 않았어요.');
+      await interaction.editReply('이 메시지에는 봇이 반응하지 않았어요.');
       return;
     }
 

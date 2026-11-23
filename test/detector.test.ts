@@ -103,3 +103,49 @@ test('channel include/exclude lists apply to threads through their parent', () =
   assert.equal(channelWatched({ ...s, includeChannels: ['c2'] }, 'c1', null), false);
   assert.equal(channelWatched({ ...s, includeChannels: ['c2'] }, 'thread', 'c2'), true);
 });
+
+test('a video attachment matches the same file posted earlier, and is downloaded once per URL', async () => {
+  const store = new MemoryStore();
+  const hashes: Record<string, string> = { 'https://cdn/a.mp4': 'aaa', 'https://cdn/b.mp4': 'aaa', 'https://cdn/c.mp4': 'ccc' };
+  let downloads = 0;
+  const detector = new Detector({
+    store,
+    imageMaxBytes: 1_000_000,
+    hashImageUrl: async () => null,
+    fileMaxBytes: 50_000_000,
+    hashFileUrl: async (url) => {
+      downloads++;
+      return hashes[url] ?? null;
+    },
+  });
+  const video = (url: string, size = 1000) => msg('', { attachments: [{ url, contentType: 'video/mp4', size }] });
+
+  assert.equal((await post(detector, ref('v1', 'alice', 0), video('https://cdn/a.mp4'))).match, null);
+  const repost = await post(detector, ref('v2', 'bob', 60), video('https://cdn/b.mp4'));
+  assert.equal(repost.match?.reason, 'file');
+  assert.equal(repost.match?.hit.messageId, 'v1');
+  assert.equal((await post(detector, ref('v3', 'bob', 120), video('https://cdn/c.mp4'))).match, null);
+
+  // an edit re-delivers the same attachment: no second download
+  await detector.index(ref('v1', 'alice', 0), video('https://cdn/a.mp4'));
+  assert.equal(downloads, 3);
+});
+
+test('videos over the size cap, and with videos turned off, are not downloaded', async () => {
+  let downloads = 0;
+  const make = (fileMaxBytes: number) =>
+    new Detector({
+      store: new MemoryStore(),
+      imageMaxBytes: 1_000_000,
+      hashImageUrl: async () => null,
+      fileMaxBytes,
+      hashFileUrl: async () => {
+        downloads++;
+        return 'x';
+      },
+    });
+  const big = msg('', { attachments: [{ url: 'https://cdn/big.mp4', contentType: 'video/mp4', size: 2_000 }] });
+  await make(1_000).index(ref('b1', 'alice', 0), big);
+  await make(0).index(ref('b2', 'alice', 0), big);
+  assert.equal(downloads, 0);
+});

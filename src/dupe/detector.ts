@@ -1,11 +1,18 @@
-import { collectImageSources, collectLinks, DEFAULT_IGNORED_HOSTS, type LinkItem, type MessageLike } from '../detect/collect.ts';
+import {
+  collectFileSources,
+  collectImageSources,
+  collectLinks,
+  DEFAULT_IGNORED_HOSTS,
+  type LinkItem,
+  type MessageLike,
+} from '../detect/collect.ts';
 import type { ImageHash } from '../detect/image.ts';
 import type { Fingerprint, GuildSettings, IndexedHit, MessageRef, Store } from '../store/types.ts';
 
 // Fingerprints a message, stores it, and looks for an earlier post with the same link or image.
 
 export interface ExactMatch {
-  reason: 'url' | 'image' | 'similar-image';
+  reason: 'url' | 'file' | 'image' | 'similar-image';
   hit: IndexedHit;
 }
 
@@ -21,6 +28,10 @@ export interface DetectorDeps {
   /** download + hash; null when the image is too small, too large or unreadable */
   hashImageUrl: (url: string) => Promise<ImageHash | null>;
   imageMaxBytes: number;
+  /** download + sha256 of a video attachment; null on failure or over the cap */
+  hashFileUrl?: (url: string) => Promise<string | null>;
+  /** largest video attachment to hash (0 = videos off) */
+  fileMaxBytes?: number;
   ignoredHosts?: readonly string[];
 }
 
@@ -44,9 +55,18 @@ export class Detector {
   deps: DetectorDeps;
   // An edit or a late embed re-delivers the same attachment URLs; don't download them twice.
   imageCache = new Map<string, ImageHash | null>();
+  fileCache = new Map<string, string>();
 
   constructor(deps: DetectorDeps) {
     this.deps = deps;
+  }
+
+  rememberFile(url: string, key: string): void {
+    this.fileCache.set(url, key);
+    if (this.fileCache.size > IMAGE_CACHE_SIZE) {
+      const oldest = this.fileCache.keys().next().value;
+      if (oldest !== undefined) this.fileCache.delete(oldest);
+    }
   }
 
   async hashCached(url: string): Promise<ImageHash | null> {
@@ -76,6 +96,16 @@ export class Detector {
       if (!hash) continue;
       items.set(`image:${hash.sha256}`, { kind: 'image', key: hash.sha256, dhash: hash.dhash, title: null, description: null });
     }
+    const { hashFileUrl, fileMaxBytes = 0 } = this.deps;
+    if (hashFileUrl) {
+      for (const source of collectFileSources(message, fileMaxBytes)) {
+        // an attachment URL never changes, so an edit doesn't download the video again
+        const key = this.fileCache.get(source.url) ?? (await hashFileUrl(source.url));
+        if (!key) continue;
+        this.rememberFile(source.url, key);
+        items.set(`file:${key}`, { kind: 'file', key, dhash: null, title: null, description: null });
+      }
+    }
 
     const fresh: Fingerprint[] = [];
     const changed: Fingerprint[] = [];
@@ -99,7 +129,7 @@ export class Detector {
 
   /**
    * The earliest matching post for the given fingerprints, checked in order of certainty:
-   * same link, same image file, same picture (dHash). Allowlisted fingerprints and the author's
+   * same link, same video file, same image file, same picture (dHash). Allowlisted fingerprints and the author's
    * own recent reposts are skipped.
    */
   async findMatch(ref: MessageRef, items: Fingerprint[], settings: GuildSettings): Promise<ExactMatch | null> {
@@ -113,6 +143,10 @@ export class Detector {
     for (const item of usable.filter((i) => i.kind === 'url')) {
       const hit = accept(await store.findExact(ref, 'url', item.key));
       if (hit) return { reason: 'url', hit };
+    }
+    for (const item of usable.filter((i) => i.kind === 'file')) {
+      const hit = accept(await store.findExact(ref, 'file', item.key));
+      if (hit) return { reason: 'file', hit };
     }
     const images = usable.filter((i) => i.kind === 'image');
     for (const item of images) {

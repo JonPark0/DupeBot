@@ -31,6 +31,19 @@ export interface LinkItem {
   description: string | null;
 }
 
+export interface FileSource {
+  url: string;
+  size: number;
+}
+
+/** Video attachments up to `maxBytes` (0 = none). Matched by exact bytes, not by picture. */
+export function collectFileSources(message: MessageLike, maxBytes: number): FileSource[] {
+  if (maxBytes <= 0) return [];
+  return message.attachments
+    .filter((a) => a.contentType?.startsWith('video/') && a.size > 0 && a.size <= maxBytes)
+    .map((a) => ({ url: a.url, size: a.size }));
+}
+
 export interface ImageSource {
   url: string;
   origin: 'attachment' | 'embed';
