@@ -5,6 +5,7 @@ import { commandBodies } from './commands/definitions.ts';
 import { CommandRegistry } from './commands/registry.ts';
 import { config } from './config.ts';
 import { downloadImage, hashImage } from './detect/image.ts';
+import { hashFileUrl } from './detect/file.ts';
 import { Detector } from './dupe/detector.ts';
 import { logger } from './logger.ts';
 import { SemanticJudge } from './semantic/judge.ts';
@@ -56,6 +57,8 @@ const judge = new SemanticJudge({
 const detector = new Detector({
   store,
   imageMaxBytes: config.imageMaxBytes,
+  fileMaxBytes: config.videoMaxBytes,
+  hashFileUrl: (url) => hashFileUrl(url, config.videoMaxBytes),
   hashImageUrl: async (url) => {
     const bytes = await downloadImage(url, config.imageMaxBytes);
     return bytes ? hashImage(bytes, config.imageMinSize) : null;

@@ -3,7 +3,7 @@ import type { ResponseMode } from '../modes.ts';
 // The storage interface the bot logic depends on. PgStore implements it on Postgres; tests use
 // an in-memory fake, so the matching logic runs without a database.
 
-export type FingerprintKind = 'url' | 'image';
+export type FingerprintKind = 'url' | 'image' | 'file';
 
 export interface Fingerprint {
   kind: FingerprintKind;
@@ -100,7 +100,7 @@ export interface Store extends UsageStore {
   responsesFor(messageId: string): Promise<ResponseRecord[]>;
   deleteResponses(messageId: string): Promise<void>;
 
-  countForGuild(guildId: string): Promise<{ urls: number; images: number }>;
+  countForGuild(guildId: string): Promise<{ urls: number; images: number; files: number }>;
   /** Delete entries older than `retentionDays`. Returns the number of fingerprints removed. */
   purge(retentionDays: number): Promise<number>;
 }

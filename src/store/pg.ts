@@ -284,13 +284,14 @@ export class PgStore implements Store {
     );
   }
 
-  async countForGuild(guildId: string): Promise<{ urls: number; images: number }> {
+  async countForGuild(guildId: string): Promise<{ urls: number; images: number; files: number }> {
     const { rows } = await this.pool.query(
-      `SELECT count(*) FILTER (WHERE kind = 'url') AS urls, count(*) FILTER (WHERE kind = 'image') AS images
+      `SELECT count(*) FILTER (WHERE kind = 'url') AS urls, count(*) FILTER (WHERE kind = 'image') AS images,
+              count(*) FILTER (WHERE kind = 'file') AS files
        FROM fingerprints WHERE guild_id = $1`,
       [guildId],
     );
-    return { urls: Number(rows[0]?.urls ?? 0), images: Number(rows[0]?.images ?? 0) };
+    return { urls: Number(rows[0]?.urls ?? 0), images: Number(rows[0]?.images ?? 0), files: Number(rows[0]?.files ?? 0) };
   }
 
   async purge(retentionDays: number): Promise<number> {

@@ -21,6 +21,9 @@ ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS relay_bots TEXT[] NOT NULL D
 -- Sticker mode (added later): the server sticker to reply with, and whether to react as well.
 ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS sticker_id TEXT;
 ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS sticker_react BOOLEAN NOT NULL DEFAULT FALSE;
+-- Video attachments (kind 'file', added later): matched by the sha256 of their bytes.
+ALTER TABLE fingerprints DROP CONSTRAINT IF EXISTS fingerprints_kind_check;
+ALTER TABLE fingerprints ADD CONSTRAINT fingerprints_kind_check CHECK (kind IN ('url', 'image', 'file'));
 ALTER TABLE guild_settings DROP CONSTRAINT IF EXISTS guild_settings_mode_check;
 ALTER TABLE guild_settings ADD CONSTRAINT guild_settings_mode_check CHECK (mode IN ('forward', 'reply', 'react', 'sticker'));
 

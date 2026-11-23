@@ -15,7 +15,7 @@ story posted under a different URL. Self-hosted with Docker Compose on an arm64 
 
 - [src/index.ts](src/index.ts): startup: schema migration (retries until Postgres is up), Discord client, command registration, daily purge
 - [src/bot.ts](src/bot.ts): event handlers (create/update/delete) and commands (`/dupe`, `/status`, "중복 아님")
-- [src/detect/](src/detect/): URL normalization, image hashing (sha256 + dHash), what to collect from a message
+- [src/detect/](src/detect/): URL normalization, image hashing (sha256 + dHash), video sha256 (streamed), what to collect from a message
 - [src/dupe/detector.ts](src/dupe/detector.ts): index a message, find the earliest match
 - [src/dupe/decide.ts](src/dupe/decide.ts): forward / reply / react, including the private-channel rule
 - [src/dupe/respond.ts](src/dupe/respond.ts): the Discord side of a response

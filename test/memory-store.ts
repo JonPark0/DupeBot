@@ -125,7 +125,8 @@ export class MemoryStore implements Store {
   }
   async countForGuild(guildId: string) {
     const rows = this.rows.filter((r) => r.guildId === guildId);
-    return { urls: rows.filter((r) => r.kind === 'url').length, images: rows.filter((r) => r.kind === 'image').length };
+    const count = (kind: string) => rows.filter((r) => r.kind === kind).length;
+    return { urls: count('url'), images: count('image'), files: count('file') };
   }
   async purge() {
     return 0;
